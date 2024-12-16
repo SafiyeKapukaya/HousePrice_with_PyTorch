@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import torch
+import matplotlib.pyplot as plt
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
@@ -74,14 +75,10 @@ for i,e in enumerate(embed_representation):
 embedding_val
 
 z = torch.cat(embedding_val,1)
-z
-
+print(z)
 droput = nn.Dropout(.4)
-
 final_embed =droput(z)
-final_embed
-
-
+print(final_embed)
 class FeedForwardNN(nn.Module):
     def __init__(self, embedding_dimensions, n_cont, out_sz, layers, p=0.5):
         super().__init__()
@@ -114,10 +111,53 @@ class FeedForwardNN(nn.Module):
         x = self.layers(x)
         return x
 
-
 torch.manual_seed(100)
 model = FeedForwardNN(embedding_dimensions,len(num_cols),1,[100,50],p=0.4)
+print(model)
+loss_func = nn.MSELoss()
+optimizer = torch.optim.Adam(model.parameters(),lr=0.01)
 
-model
+batch_size = 1200
+test_size = int(batch_size*0.15)
+train_cat_cols = cat_cols[:batch_size-test_size]
+test_cat_cols = cat_cols[batch_size-test_size:batch_size]
+train_num_cols = num_values[:batch_size-test_size]
+test_num_cols = num_values[batch_size-test_size:batch_size]
+target_train = target[:batch_size-test_size]
+target_test = target[batch_size-test_size:batch_size]
+
+epochs=5000
+final_losses = []
+for i in range(epochs):
+    i=i+1
+    y_pred=model(train_cat_cols,train_num_cols)
+    loss = torch.sqrt(loss_func(y_pred,target_train))
+    final_losses.append(loss)
+    if i%10==1:
+        print(f"Epoch number: {i} and the loss : {loss.item()}")
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+final_losses = [loss.detach().numpy() if hasattr(loss, 'detach') else loss for loss in final_losses]
+plt.plot(range(epochs), final_losses)
+plt.ylabel('RMSE Loss')
+plt.xlabel('epoch');
+
+y_pred = ""
+with torch.no_grad():
+    y_pred = model(test_cat_cols,test_num_cols)
+    loss = torch.sqrt(loss_func(y_pred,target_test))
+print(f'RMSE: {loss}')
+
+data_verify = pd.DataFrame(target_test.tolist(),columns = ["Test"])
+data_predicted = pd.DataFrame(y_pred.tolist(),columns = ["Prediction"])
+print(data_predicted)
+torch.save(model,'HousePrice.pt')
+torch.save(model.state_dict(),'HouseWeights.pt')
+embs_size = [(15,8),(5,3),(2,1),(4,2)]
+model1 = FeedForwardNN(embs_size,5,1,[100,50],p=0.4)
+model1.load_state_dict(torch.load('HouseWeights.pt'))
+model1.eval()
 
 
